@@ -2089,8 +2089,8 @@ end
 function repartition(A::PSparseMatrix{<:AbstractSparseMatrix},new_rows,new_cols;reuse=Val(false))
     function prepare_triplets(A_partition,A_rows,A_cols)
         I,J,V = findnz(A_partition)
-        map_own_to_global!(I,A_rows)
-        map_own_to_global!(J,A_cols)
+        map_local_to_global!(I,A_rows)
+        map_local_to_global!(J,A_cols)
         (I,J,V)
     end
     A_rows = partition(axes(A,1))
