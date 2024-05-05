@@ -1256,12 +1256,37 @@ function replace_ghost(a::OwnAndGhostIndices,ghost::GhostIndices)
     OwnAndGhostIndices(a.own,ghost,a.global_to_owner)
 end
 
-function find_owner(indices,global_ids,::Type{<:OwnAndGhostIndices{T}}) where T
-    if T == Nothing
-        error("Not enough data to perform this operation without communciation")
+struct GlobalToOwner{Int32} <: AbstractVector{Int32}
+    owner::Int32
+    global_to_own::VectorFromDict{Int,Int32}
+    global_to_ghost::VectorFromDict{Int,Int32}
+    ghost_to_owner::Vector{Int32}
+end
+
+function Base.getindex(a::GlobalToOwner,i::Int)
+    o = a.global_to_own[i]
+    if o > 0
+        return a.owner 
     end
+    o = a.global_to_ghost[i]
+    if o > 0
+        return a.ghost_to_owner[o]
+    end
+    return Int32(0)
+end
+
+function find_owner(indices,global_ids,::Type{<:OwnAndGhostIndices{T}}) where T
     map(global_ids,indices) do global_ids, indices
-        map_global_to_owner(global_ids,indices.global_to_owner)
+        if T == Nothing
+            owner = part_id(indices)
+            global2own = global_to_own(indices)
+            global2ghost = global_to_ghost(indices)
+            ghost2owner = ghost_to_owner(indices)
+            global_to_owner = GlobalToOwner(owner,global2own,global2ghost,ghost2owner)
+        else
+            global_to_owner = indices.global_to_owner
+        end
+        map_global_to_owner(global_ids,global_to_owner)
     end
 end
 
@@ -1274,7 +1299,11 @@ function map_global_to_owner(I,global_to_owner)
             owners[k] = zero(Ti)
             continue
         end
-        owners[k] = global_to_owner[i]
+        o = global_to_owner[i]
+        if o<1
+            error("Not enough data to perform this operation without communication")
+        end
+        owners[k] = o
     end
     owners
 end
