@@ -2055,7 +2055,7 @@ end
 """
     repartition(A::PSparseMatrix,new_rows,new_cols;reuse=false)
 """
-function repartition(A::PSparseMatrix,new_rows,new_cols;reuse=Val(false))
+function repartition(A::PSparseMatrix{<:AbstractSplitMatrix},new_rows,new_cols;reuse=Val(false))
     function prepare_triplets(A_own_own,A_own_ghost,A_rows,A_cols)
         I1,J1,V1 = findnz(A_own_own)
         I2,J2,V2 = findnz(A_own_ghost)
@@ -2073,6 +2073,29 @@ function repartition(A::PSparseMatrix,new_rows,new_cols;reuse=Val(false))
     A_rows = partition(axes(A,1))
     A_cols = partition(axes(A,2))
     I,J,V = map(prepare_triplets,A_own_own,A_own_ghost,A_rows,A_cols) |> tuple_of_arrays
+    # TODO this one does not preserve the local storage layout of A
+    t = psparse(I,J,V,new_rows,new_cols;reuse=true)
+    @async begin
+        B,cacheB = fetch(t)
+        if val_parameter(reuse) == false
+            B
+        else
+            cache = (V,cacheB)
+            B, cache
+        end
+    end
+end
+
+function repartition(A::PSparseMatrix{<:AbstractSparseMatrix},new_rows,new_cols;reuse=Val(false))
+    function prepare_triplets(A_partition,A_rows,A_cols)
+        I,J,V = findnz(A_partition)
+        map_own_to_global!(I,A_rows)
+        map_own_to_global!(J,A_cols)
+        (I,J,V)
+    end
+    A_rows = partition(axes(A,1))
+    A_cols = partition(axes(A,2))
+    I,J,V = map(prepare_triplets,partition(A),A_rows,A_cols) |> tuple_of_arrays
     # TODO this one does not preserve the local storage layout of A
     t = psparse(I,J,V,new_rows,new_cols;reuse=true)
     @async begin
